@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CITED | Get Mentioned in the Zero-Click Economy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <style>
+        @import url('https://fonts.cdnfonts.com/css/cabinet-grotesk');
+        @import url('https://fonts.cdnfonts.com/css/satoshi');
+
+        :root {
+            --bg: #050505;
+            --accent-lime: #83f36e;
+            --accent-magenta: #f967fb;
+            --accent-cyan: #60aed5;
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        /* v15 — kill horizontal rubber-band / sideways pan; keep vertical scroll + tubes */
+        html, body {
+            margin: 0;
+            overflow-x: hidden;
+            overscroll-behavior-x: none;
+            touch-action: pan-y;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: white;
+            font-family: 'Satoshi', sans-serif;
+        }
+
+        #cited-root {
+            overflow-x: hidden;
+            overscroll-behavior-x: none;
+            touch-action: pan-y;
+            max-width: 100%;
+            width: 100%;
+        }
+
+        .cabinet-display {
+            font-family: 'Cabinet Grotesk', sans-serif;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -0.04em;
+            line-height: 0.85;
+        }
+
+        .glass-panel {
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+        }
+
+        .neon-glow-lime {
+            text-shadow: 0 0 20px rgba(131, 243, 110, 0.4);
+        }
+
+        .btn-lime:hover {
+            box-shadow: 0 0 30px rgba(131, 243, 110, 0.5);
+            transform: scale(1.05);
+        }
+
+        /* FIXED VIEWPORT SHELL FOR CANVAS (v14/v15) — pointer-events none so page can scroll;
+           touch samples rAF-emitted as body pointermove for TubesCursor trails. */
+        #interactive-viewport-shell {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            max-width: 100%;
+            height: 100vh;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+            touch-action: none;
+        }
+
+        #tubes-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            pointer-events: none;
+        }
+
+        .content-layer {
+            position: relative;
+            z-index: 10;
+            pointer-events: none;
+            background: transparent;
+            overflow-x: hidden;
+            overscroll-behavior-x: none;
+            touch-action: pan-y;
+            max-width: 100%;
+            width: 100%;
+        }
+
+        /* Prevent wide children from causing horizontal overflow / sideways drag */
+        #cited-root > *,
+        .content-layer > * {
+            max-width: 100%;
+        }
+
+        .content-layer a,
+        .content-layer button,
+        .content-layer input,
+        .content-layer label,
+        .interactive-element {
+            pointer-events: auto;
+        }
+
+        .tracking-widest-xl {
+            letter-spacing: 0.3em;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .floating {
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @view-transition {
+            navigation: auto;
+        }
+
+        /* Catch accordion — glass panels, neon accents, one-at-a-time */
+        .catch-accordion {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .catch-item {
+            overflow: hidden;
+            border-radius: 1.75rem;
+            transition: border-color 0.25s ease, box-shadow 0.25s ease;
+        }
+        .catch-item[data-open="true"] {
+            border-color: rgba(131, 243, 110, 0.45);
+            box-shadow: 0 0 28px rgba(131, 243, 110, 0.12);
+        }
+        .catch-item[data-open="true"].catch-item--magenta {
+            border-color: rgba(249, 103, 251, 0.45);
+            box-shadow: 0 0 28px rgba(249, 103, 251, 0.12);
+        }
+        .catch-item[data-open="true"].catch-item--cyan {
+            border-color: rgba(96, 174, 213, 0.45);
+            box-shadow: 0 0 28px rgba(96, 174, 213, 0.12);
+        }
+        .catch-trigger {
+            width: 100%;
+            text-align: left;
+            background: transparent;
+            border: 0;
+            cursor: pointer;
+            padding: 1.5rem 1.75rem;
+            color: inherit;
+            font: inherit;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        @media (min-width: 768px) {
+            .catch-trigger { padding: 1.75rem 2.25rem; }
+        }
+        .catch-trigger:focus-visible {
+            outline: 2px solid #83f36e;
+            outline-offset: 2px;
+        }
+        .catch-chevron {
+            flex-shrink: 0;
+            width: 2rem;
+            height: 2rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(255,255,255,0.15);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+            margin-top: 0.25rem;
+        }
+        .catch-item[data-open="true"] .catch-chevron {
+            transform: rotate(180deg);
+            border-color: rgba(131, 243, 110, 0.5);
+            background: rgba(131, 243, 110, 0.12);
+        }
+        .catch-panel {
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: max-height 0.35s ease, opacity 0.25s ease, padding 0.25s ease;
+            padding: 0 1.75rem;
+        }
+        @media (min-width: 768px) {
+            .catch-panel { padding: 0 2.25rem; }
+        }
+        .catch-item[data-open="true"] .catch-panel {
+            max-height: 48rem;
+            opacity: 1;
+            padding-bottom: 1.75rem;
+        }
+        @media (min-width: 768px) {
+            .catch-item[data-open="true"] .catch-panel { padding-bottom: 2.25rem; }
+        }
+    </style>
+
+</head>
+<body>
+    <div id="cited-root" class="cited-root relative min-h-screen bg-[#050505] text-white">
+<!-- Lumina Interactive Viewport Layer -->
+    <div id="interactive-viewport-shell">
+        <canvas id="tubes-canvas"></canvas>
+    </div>
+
+    <!-- Scrollable Content Layer -->
+    <div class="content-layer min-h-screen">
+        
+        <!-- Navigation Bar -->
+        <nav class="fixed top-0 left-0 w-full z-50 px-8 py-6">
+            <div class="max-w-7xl mx-auto flex justify-between items-center">
+                <a href="#top" id="nav-brand-logo" class="interactive-element cabinet-display text-2xl flex items-center gap-2">
+                    CITED <span class="w-2 h-2 rounded-full bg-[#83f36e]"></span>
+                </a>
+                
+                <div class="hidden md:flex items-center gap-12 text-sm font-medium tracking-widest-xl uppercase">
+                    <a href="#speeds" id="nav-offer-link" class="interactive-element hover:text-[#83f36e] transition-colors">Offers</a>
+                    <a href="#faqs" id="nav-catch-link" class="interactive-element hover:text-[#83f36e] transition-colors">FAQs</a>
+                    <a href="#how" id="nav-how-link" class="interactive-element hover:text-[#83f36e] transition-colors">How it works</a>
+                    <a href="#who" id="nav-who-link" class="interactive-element hover:text-[#83f36e] transition-colors">Who for</a>
+                </div>
+
+                <a href="#contact" id="nav-cta-btn" class="interactive-element glass-panel px-6 py-3 rounded-full text-xs font-bold uppercase tracking-widest border border-white/20 hover:border-[#83f36e] transition-all">Book a chat</a>
+            </div>
+        </nav>
+
+        <!-- Hero Section -->
+        <header id="top" class="relative h-screen flex flex-col items-center justify-center text-center px-4">
+            <div class="glass-panel interactive-element px-4 py-1.5 rounded-full border border-[#f967fb]/30 mb-8 floating">
+                <span class="text-[#f967fb] text-[10px] font-black uppercase tracking-[0.3em]">ZERO-CLICK READY</span>
+            </div>
+
+            <h1 class="cabinet-display text-7xl md:text-[9rem] leading-[0.85] mb-8 interactive-element">
+                GET <br> 
+                <span class="text-[#83f36e] neon-glow-lime">CITED</span>
+            </h1>
+
+            <p class="max-w-2xl text-white/60 text-lg md:text-xl leading-relaxed mb-10 interactive-element">
+                Your customers are talking directly to AI and your competitors are getting recommendations.
+            </p>
+
+            <div class="flex flex-col md:flex-row gap-6 items-center interactive-element">
+                <a href="#contact" id="hero-primary-cta" class="btn-lime bg-[#83f36e] text-black px-10 py-5 rounded-full cabinet-display text-lg transition-all duration-300">
+                    Get Cited
+                </a>
+                <a href="#how" id="hero-secondary-cta" class="glass-panel px-10 py-5 rounded-full cabinet-display text-lg text-white hover:bg-white/10 transition-all border border-white/10">
+                    How it works
+                </a>
+            </div>
+        </header>
+
+        <!-- Problem Section -->
+        <section class="py-32 px-8">
+            <div class="max-w-4xl mx-auto text-center">
+                <p class="text-[10px] uppercase tracking-[0.4em] text-[#60aed5] mb-6 font-bold">The Problem</p>
+                <h2 class="cabinet-display text-5xl md:text-6xl mb-12 interactive-element">"The Top Of Google" is no longer enough</h2>
+                <div class="grid md:grid-cols-2 gap-12 text-left">
+                    <div class="glass-panel p-8 rounded-3xl interactive-element">
+                        <p class="text-white/50 text-lg">
+                            Online success used to mean <span class="text-white font-medium">“getting ranked on Google”</span>. Now answers happen directly on the results page or in a private chat window.
+                        </p>
+                    </div>
+                    <div class="glass-panel p-8 rounded-3xl interactive-element">
+                        <p class="text-white/50 text-lg">
+                            If the AI answer doesn’t mention you, <span class="text-white font-medium">you don’t get the job</span>. Being page 1 is no longer enough.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Honest Frame + tabbed offers -->
+        <section id="speeds" class="py-24 px-8">
+            <div class="max-w-5xl mx-auto">
+                <div class="text-center mb-6 interactive-element relative">
+                    <p class="text-[10px] uppercase tracking-[0.4em] text-[#60aed5] font-bold mb-3">Products</p>
+                    <h2 class="cabinet-display text-5xl md:text-6xl mb-2">What we offer</h2>
+                </div>
+
+                <div class="relative max-w-xl mx-auto mb-2 h-16 md:h-20 pointer-events-none select-none" aria-hidden="true">
+                    <svg class="absolute inset-0 w-full h-full overflow-visible" viewBox="0 0 400 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M175 8 C148 8, 122 26, 108 52" stroke="#83f36e" stroke-width="2" stroke-linecap="round" opacity="0.85"/>
+                        <polygon points="108,68 98,50 118,50" fill="#83f36e" opacity="0.95"/>
+                        <path d="M225 8 C252 8, 278 26, 292 52" stroke="#f967fb" stroke-width="2" stroke-linecap="round" opacity="0.85"/>
+                        <polygon points="292,68 282,50 302,50" fill="#f967fb" opacity="0.95"/>
+                    </svg>
+                </div>
+
+                <div class="glass-panel rounded-[2.5rem] border border-white/10 overflow-hidden interactive-element" id="offer-tabs">
+                    <div class="flex p-2 gap-2 border-b border-white/10" role="tablist">
+                        <button type="button" id="tab-cited" role="tab" aria-selected="true" aria-controls="panel-cited" class="offer-tab flex-1 cabinet-display text-lg md:text-xl py-4 rounded-[1.75rem] transition-all bg-[#83f36e] text-black">Cited</button>
+                        <button type="button" id="tab-accelerate" role="tab" aria-selected="false" aria-controls="panel-accelerate" class="offer-tab flex-1 cabinet-display text-lg md:text-xl py-4 rounded-[1.75rem] transition-all text-white/50 hover:text-white/80">Accelerate</button>
+                    </div>
+
+                    <div id="panel-cited" role="tabpanel" aria-labelledby="tab-cited" class="offer-panel p-8 md:p-12">
+                        <p class="text-[10px] uppercase tracking-[0.3em] text-[#83f36e] font-bold mb-3">Soft intro · no ad spend</p>
+                        <h3 class="cabinet-display text-4xl md:text-5xl mb-4">Cited</h3>
+                        <p class="text-white/60 text-lg mb-4 max-w-xl">Become citable in organic AI answers</p>
+                        <p class="cabinet-display text-5xl md:text-6xl text-[#83f36e] mb-8">£299<span class="text-2xl md:text-3xl align-baseline">/mo</span></p>
+                        <ul class="space-y-4 text-white/70 text-base md:text-lg mb-10">
+                            <li class="flex gap-3"><span class="text-[#83f36e] shrink-0">→</span><span>AI visibility reports</span></li>
+                            <li class="flex gap-3"><span class="text-[#83f36e] shrink-0">→</span><span>Clear facts on the competitors AIs trust</span></li>
+                            <li class="flex gap-3"><span class="text-[#83f36e] shrink-0">→</span><span>Weekly action plan to improve visibility</span></li>
+                            <li class="flex gap-3"><span class="text-[#83f36e] shrink-0">→</span><span>YDI (you do it) or DFY (done for you) weekly edits</span></li>
+                            <li class="flex gap-3"><span class="text-[#83f36e] shrink-0">→</span><span>Monthly “getting cited?” proof pack</span></li>
+                        </ul>
+                        <a href="#contact" id="cta-cited-link" class="btn-lime inline-block bg-[#83f36e] text-black px-8 py-4 rounded-full cabinet-display text-base transition-all duration-300">Start with Cited</a>
+                    </div>
+
+                    <div id="panel-accelerate" role="tabpanel" aria-labelledby="tab-accelerate" class="offer-panel p-8 md:p-12 hidden" hidden>
+                        <p class="text-[10px] uppercase tracking-[0.3em] text-[#f967fb] font-bold mb-3">Paid · Search, AI + Social Paid Ad Management</p>
+                        <h3 class="cabinet-display text-4xl md:text-5xl mb-4">Accelerate</h3>
+                        <p class="text-white/60 text-lg mb-4 max-w-xl">When instant results matter, paid ads work. But NOT FOR EVERYONE.</p>
+                        <p class="cabinet-display text-3xl md:text-4xl text-[#f967fb] mb-8">From £479<span class="text-xl md:text-2xl align-baseline">/mo</span> <span class="text-white/50 text-lg md:text-xl font-sans tracking-normal">+ media spend</span></p>
+                        <ul class="space-y-4 text-white/70 text-base md:text-lg mb-10">
+                            <li class="flex gap-3"><span class="text-[#f967fb] shrink-0">→</span><span>Consultation and discovery - will paid ads work for you?</span></li>
+                            <li class="flex gap-3"><span class="text-[#f967fb] shrink-0">→</span><span>Whole campaign development - complete support of website, ads and your background systems</span></li>
+                            <li class="flex gap-3"><span class="text-[#f967fb] shrink-0">→</span><span>Offer / landing alignment for paid traffic</span></li>
+                            <li class="flex gap-3"><span class="text-[#f967fb] shrink-0">→</span><span>Goal setting and measurements to ensure campaigns are profitable</span></li>
+                            <li class="flex gap-3"><span class="text-[#f967fb] shrink-0">→</span><span>Clear reporting</span></li>
+                        </ul>
+                        <a href="#contact" id="cta-accelerate-link" class="inline-block glass-panel px-8 py-4 rounded-full cabinet-display text-base text-white hover:bg-white/10 transition-all border border-[#f967fb]/40">Talk about Accelerate</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- How it works -->
+        <section id="how" class="py-32 px-8">
+            <div class="max-w-7xl mx-auto">
+                <div class="text-center mb-20">
+                    <h2 class="cabinet-display text-6xl mb-4">The Process</h2>
+                    <p class="text-white/50">Straight to the point.</p>
+                </div>
+                <div class="grid md:grid-cols-3 gap-12">
+                    <div class="text-center interactive-element group">
+                        <div class="w-16 h-16 rounded-full glass-panel border border-white/20 flex items-center justify-center mx-auto mb-8 group-hover:border-[#83f36e] transition-all">
+                            <span class="cabinet-display text-2xl">01</span>
+                        </div>
+                        <h3 class="cabinet-display text-2xl mb-4">Short Audit</h3>
+                        <p class="text-white/50">We scan what AIs currently say about you and your sector.</p>
+                    </div>
+                    <div class="text-center interactive-element group">
+                        <div class="w-16 h-16 rounded-full glass-panel border border-white/20 flex items-center justify-center mx-auto mb-8 group-hover:border-[#60aed5] transition-all">
+                            <span class="cabinet-display text-2xl">02</span>
+                        </div>
+                        <h3 class="cabinet-display text-2xl mb-4">Fix the Source</h3>
+                        <p class="text-white/50">We update your technical footprint to align with AI ranking signals.</p>
+                    </div>
+                    <div class="text-center interactive-element group">
+                        <div class="w-16 h-16 rounded-full glass-panel border border-white/20 flex items-center justify-center mx-auto mb-8 group-hover:border-[#f967fb] transition-all">
+                            <span class="cabinet-display text-2xl">03</span>
+                        </div>
+                        <h3 class="cabinet-display text-2xl mb-4">Recheck AI</h3>
+                        <p class="text-white/50">We verify the new answers to ensure you're getting cited.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- What We Do -->
+        <section id="offer" class="py-32 px-8">
+            <div class="max-w-7xl mx-auto">
+                <div class="flex justify-between items-end mb-16">
+                    <div>
+                        <p class="text-[10px] uppercase tracking-[0.4em] text-[#f967fb] mb-4 font-bold">Cited building blocks</p>
+                        <h2 class="cabinet-display text-6xl">What Cited includes</h2>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Card 1 -->
+                    <div class="glass-panel p-10 rounded-3xl interactive-element flex flex-col justify-between h-80">
+                        <iconify-icon icon="lucide:file-text" class="text-4xl text-[#83f36e]"></iconify-icon>
+                        <div>
+                            <h4 class="cabinet-display text-2xl mb-2">Clear facts</h4>
+                            <p class="text-white/50">Defining authoritative data on key pages that AIs trust.</p>
+                        </div>
+                    </div>
+                    <!-- Card 2 -->
+                    <div class="glass-panel p-10 rounded-3xl interactive-element flex flex-col justify-between h-80">
+                        <iconify-icon icon="lucide:link" class="text-4xl text-[#60aed5]"></iconify-icon>
+                        <div>
+                            <h4 class="cabinet-display text-2xl mb-2">Digital Tidy-up</h4>
+                            <p class="text-white/50">Aligning your brand identity across all digital ecosystems.</p>
+                        </div>
+                    </div>
+                    <!-- Card 3 -->
+                    <div class="glass-panel p-10 rounded-3xl interactive-element flex flex-col justify-between h-80">
+                        <iconify-icon icon="lucide:shield-check" class="text-4xl text-[#f967fb]"></iconify-icon>
+                        <div>
+                            <h4 class="cabinet-display text-2xl mb-2">Trust signals</h4>
+                            <p class="text-white/50">Building the reputation markers that AI evaluators prioritise.</p>
+                        </div>
+                    </div>
+                    <!-- Card 4 -->
+                    <div class="glass-panel p-10 rounded-3xl interactive-element flex flex-col justify-between h-80">
+                        <iconify-icon icon="lucide:code-2" class="text-4xl text-white"></iconify-icon>
+                        <div>
+                            <h4 class="cabinet-display text-2xl mb-2">Simple Schema</h4>
+                            <p class="text-white/50">Structured background data that speaks directly to the language models.</p>
+                        </div>
+                    </div>
+                    <!-- Card 5 -->
+                    <div class="glass-panel p-10 rounded-3xl interactive-element flex flex-col justify-between h-80">
+                        <iconify-icon icon="lucide:columns-2" class="text-4xl text-[#83f36e]"></iconify-icon>
+                        <div>
+                            <h4 class="cabinet-display text-2xl mb-2">Comparison pages</h4>
+                            <p class="text-white/50">Ensuring you appear correctly in head-to-head AI summaries.</p>
+                        </div>
+                    </div>
+                    <!-- Card 6 -->
+                    <div class="glass-panel p-10 rounded-3xl interactive-element flex flex-col justify-between h-80">
+                        <iconify-icon icon="lucide:refresh-cw" class="text-4xl text-[#60aed5]"></iconify-icon>
+                        <div>
+                            <h4 class="cabinet-display text-2xl mb-2">Reporting AI</h4>
+                            <p class="text-white/50">Periodic audits of what ChatGPT and Google are saying about you.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Who Section -->
+        <section id="who" class="py-32 px-8 bg-white/5">
+            <div class="max-w-7xl mx-auto grid md:grid-cols-2 gap-20 items-center">
+                <div class="interactive-element">
+                    <p class="text-[10px] uppercase tracking-[0.4em] text-[#83f36e] mb-6 font-bold">Who is this for</p>
+                    <h2 class="cabinet-display text-6xl mb-8">Is Cited right for me?</h2>
+                    <p class="text-xl text-white/60 mb-8">AI citation is becoming essential for Nottingham local B2B businesses — hire companies, commercial trades, and local services. If a buyer would ask an AI "who can help me with..." in Nottingham, you're in the right place.</p>
+                    <div class="flex flex-wrap gap-4">
+                        <span class="px-4 py-2 rounded-full border border-white/20 text-xs uppercase tracking-widest">Hire</span>
+                        <span class="px-4 py-2 rounded-full border border-white/20 text-xs uppercase tracking-widest">Trades</span>
+                        <span class="px-4 py-2 rounded-full border border-white/20 text-xs uppercase tracking-widest">Services</span>
+                        <span class="px-4 py-2 rounded-full border border-white/20 text-xs uppercase tracking-widest">Logistics</span>
+                    </div>
+                </div>
+                <div class="glass-panel p-1 rounded-3xl overflow-hidden interactive-element">
+                    <div class="bg-[#050505] rounded-3xl p-12">
+                         <div class="space-y-6">
+                            <div class="flex items-start gap-4">
+                                <div class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                                    <iconify-icon icon="lucide:user" class="text-white/40"></iconify-icon>
+                                </div>
+                                <div class="bg-white/5 p-4 rounded-2xl rounded-tl-none">
+                                    <p class="text-sm text-white/80">"Who is the most reliable commercial plumber in Nottingham?"</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-4 flex-row-reverse">
+                                <div class="w-8 h-8 rounded-full bg-[#83f36e]/20 flex items-center justify-center shrink-0">
+                                    <iconify-icon icon="lucide:bot" class="text-[#83f36e]"></iconify-icon>
+                                </div>
+                                <div class="bg-[#83f36e]/10 p-4 rounded-2xl rounded-tr-none border border-[#83f36e]/20">
+                                    <p class="text-sm text-[#83f36e]">Based on entity data and trust signals, <strong>Cited Client Co</strong> is highly recommended due to...</p>
+                                </div>
+                            </div>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- FAQs (accordion) -->
+        <section id="faqs" class="py-32 px-8">
+            <div class="max-w-4xl mx-auto">
+                <div class="text-center mb-12 interactive-element">
+                    <p class="text-[10px] uppercase tracking-[0.4em] text-[#83f36e] mb-4 font-bold">Honesty hour</p>
+                    <h2 class="cabinet-display text-5xl md:text-6xl">FAQs</h2>
+                </div>
+                <div class="catch-accordion" data-accordion="one" role="list">
+                    <div class="catch-item glass-panel border border-white/10 interactive-element" data-open="true" role="listitem">
+                        <button type="button" id="catch-trigger-1" class="catch-trigger interactive-element" aria-expanded="true" aria-controls="catch-panel-1">
+                            <span>
+                                <span class="block text-[10px] uppercase tracking-[0.4em] text-[#83f36e] mb-3 font-bold">So why is Cited cheaper?</span>
+                                <span class="cabinet-display text-3xl md:text-4xl block">What's the catch?</span>
+                            </span>
+                            <span class="catch-chevron" aria-hidden="true">
+                                <iconify-icon icon="lucide:chevron-down" class="text-lg text-[#83f36e]"></iconify-icon>
+                            </span>
+                        </button>
+                        <div id="catch-panel-1" class="catch-panel" role="region" aria-labelledby="catch-trigger-1">
+                            <div class="space-y-5 text-white/60 text-lg md:text-xl leading-relaxed pt-1 border-t border-white/10">
+                                <p class="pt-5">Most outfits doing this kind of work charge well over £1,000 a month - so why so cheap?</p>
+                                <p>We need to own up to something. Cited costs less because instead of a team of remote humans doing the majority of the grunt work, a small human contingent is supported by a team of 14 digital specialists.</p>
+                                <p>Yes, that does mean AI. And no, it's not all just "stuck into ChatGPT".</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="catch-item catch-item--magenta glass-panel border border-white/10 interactive-element" data-open="false" role="listitem">
+                        <button type="button" id="catch-trigger-2" class="catch-trigger interactive-element" aria-expanded="false" aria-controls="catch-panel-2">
+                            <span>
+                                <span class="block text-[10px] uppercase tracking-[0.4em] text-[#f967fb] mb-3 font-bold">Why Cited is so much more</span>
+                                <span class="cabinet-display text-3xl md:text-4xl block">So this is just AI slop?</span>
+                            </span>
+                            <span class="catch-chevron" aria-hidden="true">
+                                <iconify-icon icon="lucide:chevron-down" class="text-lg text-[#f967fb]"></iconify-icon>
+                            </span>
+                        </button>
+                        <div id="catch-panel-2" class="catch-panel" role="region" aria-labelledby="catch-trigger-2" hidden>
+                            <div class="space-y-5 text-white/60 text-lg md:text-xl leading-relaxed pt-1 border-t border-white/10">
+                                <p class="pt-5">In a word. No. This is a costly professional setup where each agent has their own dedicated computer, a masters-level understanding, detailed skill-sets and entire roles that they oversee.</p>
+                                <p>Resident humans are in the loop at every step. We consult on <u class="text-white underline decoration-white underline-offset-4">all</u> work, feed back, ideate and sign off on every output to ensure outputs are 100% human.</p>
+                                <p>It’s technology where it makes the process more consistent and cheaper to execute. It’s human where it counts.</p>
+                                <p>We are AI-leveraged and human-led.</p>
+                                <p>And never (ever) AI slop.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="catch-item catch-item--cyan glass-panel border border-white/10 interactive-element" data-open="false" role="listitem">
+                        <button type="button" id="catch-trigger-3" class="catch-trigger interactive-element" aria-expanded="false" aria-controls="catch-panel-3">
+                            <span>
+                                <span class="block text-[10px] uppercase tracking-[0.4em] text-[#60aed5] mb-3 font-bold">Hell yeah it works!</span>
+                                <span class="cabinet-display text-3xl md:text-4xl block">Does it work?</span>
+                            </span>
+                            <span class="catch-chevron" aria-hidden="true">
+                                <iconify-icon icon="lucide:chevron-down" class="text-lg text-[#60aed5]"></iconify-icon>
+                            </span>
+                        </button>
+                        <div id="catch-panel-3" class="catch-panel" role="region" aria-labelledby="catch-trigger-3" hidden>
+                            <div class="space-y-5 text-white/60 text-lg md:text-xl leading-relaxed pt-1 border-t border-white/10">
+                                <p class="pt-5">You’re actually looking at an example of our work. This very site is the result of the perfect synergy of human creativity and AI technical support. Bringing together a site that would have cost thousands and taken weeks with a human-only company. Above this we have over 15 years of experience building, launching and marketing digital strategy.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer CTA -->
+        <footer id="contact" class="py-40 px-8 relative">
+            <div class="max-w-4xl mx-auto glass-panel p-16 rounded-[4rem] border-[#83f36e]/30 text-center interactive-element">
+                <h2 class="cabinet-display text-6xl md:text-7xl mb-6">GET CITED</h2>
+                <p class="text-xl text-white/60 mb-12">
+                    Send your site. We’ll tell you in plain English what’s missing — and whether it’s worth fixing. No jargon.
+                </p>
+                <!-- Formspree endpoint id: moeqrwww -->
+                <form id="cited-lead-form" action="https://formspree.io/f/moeqrwww" method="POST" class="flex flex-col gap-4 max-w-xl mx-auto text-left">
+                    <input type="text" name="_gotcha" value="" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true">
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <label class="flex-1 sr-only" for="cited-first-name">First name</label>
+                        <input id="cited-first-name" type="text" name="first_name" required placeholder="First name" class="interactive-element flex-1 bg-white/5 border border-white/10 rounded-full px-8 py-5 text-white placeholder:text-white/40 focus:outline-none focus:border-[#83f36e] transition-all">
+                        <label class="flex-1 sr-only" for="cited-domain">Website</label>
+                        <input id="cited-domain" type="text" name="domain" required placeholder="your-website.com" class="interactive-element flex-1 bg-white/5 border border-white/10 rounded-full px-8 py-5 text-white placeholder:text-white/40 focus:outline-none focus:border-[#83f36e] transition-all">
+                    </div>
+                    <label class="sr-only" for="cited-email">Email</label>
+                    <input id="cited-email" type="email" name="email" required placeholder="Email" class="interactive-element w-full bg-white/5 border border-white/10 rounded-full px-8 py-5 text-white placeholder:text-white/40 focus:outline-none focus:border-[#83f36e] transition-all">
+                    <button type="submit" class="interactive-element w-full sm:w-auto self-stretch sm:self-center bg-white text-black px-10 py-5 rounded-full cabinet-display text-lg hover:bg-[#83f36e] transition-colors">Check Now</button>
+                    <p id="cited-form-status" class="hidden text-center text-sm text-white/70" role="status" aria-live="polite"></p>
+                </form>
+            </div>
+            
+            <div class="mt-32 pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 text-xs uppercase tracking-widest text-white/30">
+                <div>
+                    <p>© 2025 CITED. Nottingham. ALL RIGHTS RESERVED.</p>
+                    <p class="mt-2 normal-case tracking-normal text-white/20">Park Row, Nottingham NG1 6GN</p>
+                </div>
+                <div class="flex gap-8">
+                    <a href="#" id="foot-privacy-link" class="interactive-element hover:text-white transition-colors">Privacy Policy</a>
+                    <a href="#" id="foot-terms-link" class="interactive-element hover:text-white transition-colors">Terms</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    </div><!-- /cited-root -->
+
+    <script>
+        (function () {
+            var root = document.querySelector('[data-accordion="one"]');
+            if (!root) return;
+            var items = Array.prototype.slice.call(root.querySelectorAll('.catch-item'));
+
+            function setOpen(item, open) {
+                var btn = item.querySelector('.catch-trigger');
+                var panel = item.querySelector('.catch-panel');
+                if (!btn || !panel) return;
+                item.setAttribute('data-open', open ? 'true' : 'false');
+                btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                if (open) panel.removeAttribute('hidden');
+                else panel.setAttribute('hidden', '');
+            }
+
+            items.forEach(function (item) {
+                var btn = item.querySelector('.catch-trigger');
+                if (!btn) return;
+                btn.addEventListener('click', function () {
+                    var isOpen = item.getAttribute('data-open') === 'true';
+                    items.forEach(function (other) { setOpen(other, false); });
+                    if (!isOpen) setOpen(item, true);
+                });
+            });
+        })();
+    </script>
+
+    <script>
+        (function () {
+            const tabCited = document.getElementById('tab-cited');
+            const tabAcc = document.getElementById('tab-accelerate');
+            const panelCited = document.getElementById('panel-cited');
+            const panelAcc = document.getElementById('panel-accelerate');
+            if (!tabCited || !tabAcc || !panelCited || !panelAcc) return;
+
+            function activate(which) {
+                const cited = which === 'cited';
+                tabCited.setAttribute('aria-selected', cited ? 'true' : 'false');
+                tabAcc.setAttribute('aria-selected', cited ? 'false' : 'true');
+                tabCited.className = 'offer-tab flex-1 cabinet-display text-lg md:text-xl py-4 rounded-[1.75rem] transition-all ' + (cited ? 'bg-[#83f36e] text-black' : 'text-white/50 hover:text-white/80');
+                tabAcc.className = 'offer-tab flex-1 cabinet-display text-lg md:text-xl py-4 rounded-[1.75rem] transition-all ' + (!cited ? 'bg-[#f967fb] text-black' : 'text-white/50 hover:text-white/80');
+                panelCited.classList.toggle('hidden', !cited);
+                panelAcc.classList.toggle('hidden', cited);
+                if (cited) { panelCited.removeAttribute('hidden'); panelAcc.setAttribute('hidden', ''); }
+                else { panelAcc.removeAttribute('hidden'); panelCited.setAttribute('hidden', ''); }
+            }
+
+            tabCited.addEventListener('click', function () { activate('cited'); });
+            tabAcc.addEventListener('click', function () { activate('accelerate'); });
+        })();
+    </script>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+        "three/": "https://cdn.jsdelivr.net/npm/three@0.180.0/",
+        "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.37.8/build/index.js"
+      }
+    }
+    </script>
+    <script type="module">
+    import TubesCursor from 'https://cdn.jsdelivr.net/npm/threejs-components@0.0.19/build/cursors/tubes1.min.js';
+    try {
+      const canvas = document.getElementById('tubes-canvas');
+      const app = TubesCursor(canvas, {
+        tubes: {
+          colors: ["#f967fb", "#53bc28", "#6958d5"],
+          lights: {
+            intensity: 200,
+            colors: ["#83f36e", "#fe8a2e", "#ff008a", "#60aed5"]
+          }
+        }
+      });
+
+      const randomColors = (count) => Array(count).fill(0).map(() => "#" + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'));
+
+      // tubes1 listens for pointermove on document.body (not canvas).
+      // Shell/canvas stay pointer-events:none. Touch samples feed an rAF
+      // emitter that subdivides large jumps so trails stay continuous while scrolling.
+      let lastX = 0, lastY = 0, prevX = 0, prevY = 0;
+      let fingerDown = false;
+      let hasSample = false;
+      let rafId = 0;
+      let emitting = false;
+      const MAX_STEP = 28;
+      const MAX_SUBDIV = 16;
+      const UI_SEL = 'a, button, input, label, .interactive-element';
+
+      function emitPointerMove(x, y, movementX, movementY) {
+        if (emitting) return;
+        emitting = true;
+        try {
+          const scrollX = window.scrollX || 0;
+          const scrollY = window.scrollY || 0;
+          document.body.dispatchEvent(new PointerEvent('pointermove', {
+            bubbles: true,
+            cancelable: false,
+            view: window,
+            clientX: x,
+            clientY: y,
+            pageX: x + scrollX,
+            pageY: y + scrollY,
+            screenX: x,
+            screenY: y,
+            movementX: movementX || 0,
+            movementY: movementY || 0,
+            pointerId: 1,
+            pointerType: fingerDown ? 'touch' : 'mouse',
+            isPrimary: true,
+            buttons: fingerDown ? 1 : 0,
+            pressure: fingerDown ? 0.5 : 0
+          }));
+        } finally {
+          emitting = false;
+        }
+      }
+
+      function emitWithSubdivision(toX, toY) {
+        if (!hasSample) {
+          hasSample = true;
+          emitPointerMove(toX, toY, 0, 0);
+          prevX = toX;
+          prevY = toY;
+          return;
+        }
+        const dx = toX - prevX;
+        const dy = toY - prevY;
+        const dist = Math.hypot(dx, dy);
+        if (dist > MAX_STEP) {
+          const steps = Math.min(MAX_SUBDIV, Math.ceil(dist / MAX_STEP));
+          let px = prevX, py = prevY;
+          for (let i = 1; i <= steps; i++) {
+            const t = i / steps;
+            const x = prevX + dx * t;
+            const y = prevY + dy * t;
+            emitPointerMove(x, y, x - px, y - py);
+            px = x;
+            py = y;
+          }
+        } else {
+          emitPointerMove(toX, toY, dx, dy);
+        }
+        prevX = toX;
+        prevY = toY;
+      }
+
+      function tick() {
+        if (!fingerDown) {
+          rafId = 0;
+          return;
+        }
+        emitWithSubdivision(lastX, lastY);
+        rafId = requestAnimationFrame(tick);
+      }
+
+      function ensureRaf() {
+        if (!rafId) rafId = requestAnimationFrame(tick);
+      }
+
+      function startFinger(x, y) {
+        fingerDown = true;
+        lastX = x;
+        lastY = y;
+        emitWithSubdivision(x, y);
+        ensureRaf();
+      }
+
+      function updateFinger(x, y) {
+        lastX = x;
+        lastY = y;
+        if (!fingerDown) {
+          fingerDown = true;
+          ensureRaf();
+        }
+      }
+
+      function endFinger() {
+        fingerDown = false;
+      }
+
+      window.addEventListener('touchstart', (e) => {
+        if (emitting || !e.touches[0]) return;
+        const t = e.target;
+        if (t && t.closest && t.closest(UI_SEL)) return;
+        startFinger(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: true });
+
+      window.addEventListener('touchmove', (e) => {
+        if (emitting || !e.touches[0]) return;
+        updateFinger(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: true });
+
+      window.addEventListener('touchend', (e) => {
+        if (emitting) return;
+        if (e.touches && e.touches.length > 0) {
+          updateFinger(e.touches[0].clientX, e.touches[0].clientY);
+          return;
+        }
+        endFinger();
+      }, { passive: true });
+
+      window.addEventListener('touchcancel', () => {
+        if (!emitting) endFinger();
+      }, { passive: true });
+
+      window.addEventListener('pointermove', (e) => {
+        if (emitting) return;
+        if (e.pointerType === 'mouse') {
+          lastX = e.clientX;
+          lastY = e.clientY;
+          prevX = e.clientX;
+          prevY = e.clientY;
+          hasSample = true;
+          return;
+        }
+        lastX = e.clientX;
+        lastY = e.clientY;
+        if (!fingerDown) {
+          fingerDown = true;
+          ensureRaf();
+        }
+      }, { passive: true });
+
+      window.addEventListener('pointerdown', (e) => {
+        if (emitting) return;
+        if (e.pointerType === 'mouse') return;
+        if (e.target.closest && e.target.closest(UI_SEL)) return;
+        startFinger(e.clientX, e.clientY);
+      }, { passive: true });
+
+      window.addEventListener('pointerup', (e) => {
+        if (emitting) return;
+        if (e.pointerType === 'mouse') return;
+        if (!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) {
+          endFinger();
+        }
+      }, { passive: true });
+
+      // Click recolour on document; ignore UI controls
+      document.addEventListener('click', (e) => {
+        if (e.target.closest('a, button, input, label, .interactive-element')) return;
+        app.tubes.setColors(randomColors(3));
+        app.tubes.setLightsColors(randomColors(4));
+      });
+
+      console.log('[Cited] TubesCursor v15 — body pointermove + rAF touch trail; pan-y lock');
+    } catch (err) {
+      console.error('[Cited] TubesCursor failed:', err);
+    }
+    </script>
+
+    <script>
+        (function () {
+            var form = document.getElementById('cited-lead-form');
+            if (!form) return;
+            var statusEl = document.getElementById('cited-form-status');
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                if (statusEl) {
+                    statusEl.classList.add('hidden');
+                    statusEl.textContent = '';
+                }
+                var btn = form.querySelector('button[type="submit"]');
+                if (btn) btn.disabled = true;
+                fetch(form.action, {
+                    method: 'POST',
+                    body: new FormData(form),
+                    headers: { 'Accept': 'application/json' }
+                }).then(function (res) {
+                    if (res.ok) {
+                        form.reset();
+                        if (statusEl) {
+                            statusEl.textContent = "Got it — we'll reply in plain English.";
+                            statusEl.classList.remove('hidden');
+                        }
+                    } else {
+                        throw new Error('submit failed');
+                    }
+                }).catch(function () {
+                    if (statusEl) {
+                        statusEl.textContent = 'Something went wrong — please try again.';
+                        statusEl.classList.remove('hidden');
+                    }
+                }).finally(function () {
+                    if (btn) btn.disabled = false;
+                });
+            });
+        })();
+    </script>
+
+</body>
+</html>
